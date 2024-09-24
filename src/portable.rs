@@ -12,11 +12,11 @@ use crate::traits::HighwayHash;
 /// `unsafe` code blocks is a top priority.
 #[derive(Debug, Default, Clone)]
 pub struct PortableHash {
-    v0: [u64; 4],
-    v1: [u64; 4],
-    mul0: [u64; 4],
-    mul1: [u64; 4],
-    buffer: HashPacket,
+    pub v0: [u64; 4],
+    pub v1: [u64; 4],
+    pub mul0: [u64; 4],
+    pub mul1: [u64; 4],
+    pub buffer: HashPacket,
 }
 
 impl HighwayHash for PortableHash {
@@ -287,6 +287,18 @@ impl PortableHash {
         }
     }
 }
+
+impl PartialEq for PortableHash {
+    fn eq(&self, other: &Self) -> bool {
+        self.v0 == other.v0
+            && self.v1 == other.v1
+            && self.mul0 == other.mul0
+            && self.mul1 == other.mul1
+            && self.buffer.as_slice() == other.buffer.as_slice()
+    }
+}
+
+impl Eq for PortableHash {}
 
 impl_write!(PortableHash);
 impl_hasher!(PortableHash);

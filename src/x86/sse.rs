@@ -4,6 +4,7 @@ use crate::internal::unordered_load3;
 use crate::internal::{HashPacket, PACKET_SIZE};
 use crate::key::Key;
 use crate::traits::HighwayHash;
+use crate::PortableHash;
 use core::arch::x86_64::*;
 
 /// SSE empowered implementation that will only work on `x86_64` with sse 4.1 enabled at the CPU
@@ -293,6 +294,43 @@ impl SseHash {
             }
 
             self.buffer.set_to(chunks.remainder());
+        }
+    }
+}
+
+impl From<PortableHash> for SseHash {
+    fn from(s: PortableHash) -> Self {
+        unsafe {
+            SseHash {
+                v0L: V2x64U::new(s.v0[1], s.v0[0]),
+                v0H: V2x64U::new(s.v0[3], s.v0[2]),
+                v1L: V2x64U::new(s.v1[1], s.v0[0]),
+                v1H: V2x64U::new(s.v1[3], s.v0[2]),
+                mul0L: V2x64U::new(s.mul0[1], s.mul0[0]),
+                mul0H: V2x64U::new(s.mul0[3], s.mul0[2]),
+                mul1L: V2x64U::new(s.mul1[1], s.mul1[0]),
+                mul1H: V2x64U::new(s.mul1[3], s.mul1[2]),
+                buffer: HashPacket::default(),
+            }
+        }
+    }
+}
+
+impl From<SseHash> for PortableHash {
+    fn from(h: SseHash) -> Self {
+        unsafe {
+            let u256 = |lo: &V2x64U, hi: &V2x64U| {
+                let lo = lo.as_arr();
+                let hi = hi.as_arr();
+                [lo[0], lo[1], hi[0], hi[1]]
+            };
+            PortableHash {
+                v0: u256(&h.v0L, &h.v0H),
+                v1: u256(&h.v1L, &h.v1H),
+                mul0: u256(&h.mul0L, &h.mul0H),
+                mul1: u256(&h.mul1L, &h.mul1H),
+                buffer: h.buffer,
+            }
         }
     }
 }

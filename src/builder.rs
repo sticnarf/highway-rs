@@ -2,15 +2,11 @@
 
 use crate::key::Key;
 use crate::traits::HighwayHash;
+use crate::PortableHash;
 use core::{default::Default, fmt::Debug, mem::ManuallyDrop};
 
 #[cfg(target_arch = "aarch64")]
 use crate::aarch64::NeonHash;
-#[cfg(not(any(
-    all(target_family = "wasm", target_feature = "simd128"),
-    target_arch = "aarch64"
-)))]
-use crate::portable::PortableHash;
 #[cfg(all(target_family = "wasm", target_feature = "simd128"))]
 use crate::wasm::WasmHash;
 #[cfg(target_arch = "x86_64")]
@@ -285,6 +281,98 @@ impl HighwayHasher {
             3 => unsafe { NeonHash::finalize256(&mut self.inner.neon) },
             #[cfg(all(target_family = "wasm", target_feature = "simd128"))]
             4 => unsafe { WasmHash::finalize256(&mut self.inner.wasm) },
+            _ => unsafe { core::hint::unreachable_unchecked() },
+        }
+    }
+}
+
+impl From<PortableHash> for HighwayHasher {
+    fn from(s: PortableHash) -> Self {
+        #[cfg(target_arch = "x86_64")]
+        {
+            if cfg!(target_feature = "avx2") {
+                let avx = ManuallyDrop::new(AvxHash::from(s));
+                return HighwayHasher {
+                    tag: 1,
+                    inner: HighwayChoices { avx },
+                };
+            } else if cfg!(target_feature = "sse4.1") {
+                let sse = ManuallyDrop::new(SseHash::from(s));
+                return HighwayHasher {
+                    tag: 2,
+                    inner: HighwayChoices { sse },
+                };
+            } else {
+                // Ideally we'd use `AvxHash::new` here, but it triggers a memcpy, so we
+                // duplicate the same logic to know if hasher can be enabled.
+                #[cfg(feature = "std")]
+                if is_x86_feature_detected!("avx2") {
+                    let avx = ManuallyDrop::new(AvxHash::from(s));
+                    return HighwayHasher {
+                        tag: 1,
+                        inner: HighwayChoices { avx },
+                    };
+                }
+
+                #[cfg(feature = "std")]
+                if is_x86_feature_detected!("sse4.1") {
+                    let sse = ManuallyDrop::new(SseHash::from(s));
+                    return HighwayHasher {
+                        tag: 2,
+                        inner: HighwayChoices { sse },
+                    };
+                }
+            }
+        }
+
+        #[cfg(target_arch = "aarch64")]
+        {
+            let neon = ManuallyDrop::new(NeonHash::from(s));
+            HighwayHasher {
+                tag: 3,
+                inner: HighwayChoices { neon },
+            }
+        }
+
+        #[cfg(all(target_family = "wasm", target_feature = "simd128"))]
+        {
+            let wasm = ManuallyDrop::new(WasmHash::new(key));
+            HighwayHasher {
+                tag: 4,
+                inner: HighwayChoices { wasm },
+            }
+        }
+
+        #[cfg(not(any(
+            all(target_family = "wasm", target_feature = "simd128"),
+            target_arch = "aarch64"
+        )))]
+        {
+            let portable = ManuallyDrop::new(PortableHash::from(s));
+            HighwayHasher {
+                tag: 0,
+                inner: HighwayChoices { portable },
+            }
+        }
+    }
+}
+
+impl From<HighwayHasher> for PortableHash {
+    fn from(h: HighwayHasher) -> Self {
+        match h.tag {
+            #[cfg(not(any(
+                all(target_family = "wasm", target_feature = "simd128"),
+                target_arch = "aarch64"
+            )))]
+            0 => unsafe { ManuallyDrop::into_inner(h.inner.portable).into() },
+            #[cfg(target_arch = "x86_64")]
+            1 => unsafe { ManuallyDrop::into_inner(h.inner.avx).into() },
+            #[cfg(target_arch = "x86_64")]
+            2 => unsafe { ManuallyDrop::into_inner(h.inner.sse).into() },
+            #[cfg(target_arch = "aarch64")]
+            3 => unsafe { ManuallyDrop::into_inner(h.inner.neon).into() },
+            #[cfg(all(target_family = "wasm", target_feature = "simd128"))]
+            4 => unsafe { ManuallyDrop::into_inner(h.inner.wasm).into() },
             _ => unsafe { core::hint::unreachable_unchecked() },
         }
     }

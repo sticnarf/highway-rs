@@ -626,3 +626,28 @@ fn builder_hash_eq_portable() {
         );
     }
 }
+
+#[test]
+#[cfg(target_arch = "x86_64")]
+fn hash_recover() {
+    let data: Vec<_> = (0u8..=255).cycle().take(65536).collect();
+
+    let mut h = HighwayHasher::default();
+    h.append(&data);
+    let hash1 = h.finalize256();
+
+    let mut portable = PortableHash::new(Key::default());
+    let mut start = 0;
+    for len in (1..127).cycle() {
+        let end = (start + len).min(data.len());
+        if start == end {
+            break;
+        }
+        let mut avx = highway::AvxHash::from(portable);
+        avx.append(&data[start..end]);
+        portable = avx.into();
+        start = end;
+    }
+    let hash2 = portable.finalize256();
+    assert_eq!(hash1, hash2);
+}

@@ -4,6 +4,7 @@ use crate::internal::unordered_load3;
 use crate::internal::{HashPacket, PACKET_SIZE};
 use crate::key::Key;
 use crate::traits::HighwayHash;
+use crate::PortableHash;
 use core::arch::x86_64::*;
 
 /// AVX empowered implementation that will only work on `x86_64` with avx2 enabled at the CPU
@@ -266,6 +267,34 @@ impl AvxHash {
             }
 
             self.buffer.set_to(chunks.remainder());
+        }
+    }
+}
+
+impl From<PortableHash> for AvxHash {
+    fn from(s: PortableHash) -> Self {
+        unsafe {
+            AvxHash {
+                v0: V4x64U::new(s.v0[3], s.v0[2], s.v0[1], s.v0[0]),
+                v1: V4x64U::new(s.v1[3], s.v1[2], s.v1[1], s.v1[0]),
+                mul0: V4x64U::new(s.mul0[3], s.mul0[2], s.mul0[1], s.mul0[0]),
+                mul1: V4x64U::new(s.mul1[3], s.mul1[2], s.mul1[1], s.mul1[0]),
+                buffer: s.buffer,
+            }
+        }
+    }
+}
+
+impl From<AvxHash> for PortableHash {
+    fn from(h: AvxHash) -> Self {
+        unsafe {
+            PortableHash {
+                v0: h.v0.as_arr(),
+                v1: h.v1.as_arr(),
+                mul0: h.mul0.as_arr(),
+                mul1: h.mul1.as_arr(),
+                buffer: h.buffer,
+            }
         }
     }
 }

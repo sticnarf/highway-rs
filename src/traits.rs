@@ -1,5 +1,7 @@
+use crate::PortableHash;
+
 /// The common set of methods for hashing data.
-pub trait HighwayHash: Sized {
+pub trait HighwayHash: From<PortableHash> + Into<PortableHash> + Sized {
     /// Convenience function for hashing all data in a single call and receiving a 64bit hash.
     /// Results are equivalent to appending the data manually.
     fn hash64(mut self, data: &[u8]) -> u64 {

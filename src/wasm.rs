@@ -1,5 +1,5 @@
 use crate::internal::{unordered_load3, HashPacket, PACKET_SIZE};
-use crate::{HighwayHash, Key};
+use crate::{HighwayHash, Key, PortableHash};
 use core::arch::wasm32::{self, v128};
 use core::ops::{
     Add, AddAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, ShlAssign,
@@ -270,6 +270,43 @@ impl WasmHash {
             }
 
             self.buffer.set_to(chunks.remainder());
+        }
+    }
+}
+
+impl From<PortableHash> for WasmHash {
+    fn from(s: PortableHash) -> Self {
+        unsafe {
+            WasmHash {
+                v0L: V2x64U::new(s.v0[1], s.v0[0]),
+                v0H: V2x64U::new(s.v0[3], s.v0[2]),
+                v1L: V2x64U::new(s.v1[1], s.v0[0]),
+                v1H: V2x64U::new(s.v1[3], s.v0[2]),
+                mul0L: V2x64U::new(s.mul0[1], s.mul0[0]),
+                mul0H: V2x64U::new(s.mul0[3], s.mul0[2]),
+                mul1L: V2x64U::new(s.mul1[1], s.mul1[0]),
+                mul1H: V2x64U::new(s.mul1[3], s.mul1[2]),
+                buffer: s.buffer,
+            }
+        }
+    }
+}
+
+impl From<WasmHash> for PortableHash {
+    fn from(h: WasmHash) -> Self {
+        unsafe {
+            let u256 = |lo: &V2x64U, hi: &V2x64U| {
+                let lo = lo.as_arr();
+                let hi = hi.as_arr();
+                [lo[0], lo[1], hi[0], hi[1]]
+            };
+            PortableHash {
+                v0: u256(&h.v0L, &h.v0H),
+                v1: u256(&h.v1L, &h.v1H),
+                mul0: u256(&h.mul0L, &h.mul0H),
+                mul1: u256(&h.mul1L, &h.mul1H),
+                buffer: h.buffer,
+            }
         }
     }
 }
